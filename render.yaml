@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: facebook-token-service
+    env: node
+    buildCommand: npm install
+    startCommand: node app.js
+    envVars:
+      - key: FACEBOOK_CLIENT_ID
+        sync: false
+      - key: FACEBOOK_CLIENT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: REDIRECT_URI
+        value: https://instaface.app.n8n.cloud/webhook/logins
