@@ -1,4 +1,3 @@
-// Load environment variables
 require('dotenv').config();
 
 const express = require('express');
@@ -11,18 +10,22 @@ const config = {
     clientId: process.env.FACEBOOK_CLIENT_ID,
     clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
     redirectUri: process.env.REDIRECT_URI || 'https://instaface.app.n8n.cloud/webhook/logins',
-    encryptionKey: process.env.ENCRYPTION_KEY, // Additional key for extra security
+    encryptionKey: process.env.ENCRYPTION_KEY,
     port: process.env.PORT || 3000
 };
 
-// Validate required environment variables
-function validateConfig() {
-    const required = ['FACEBOOK_CLIENT_ID', 'FACEBOOK_CLIENT_SECRET', 'ENCRYPTION_KEY'];
-    const missing = required.filter(key => !process.env[key]);
-    
-    if (missing.length) {
-        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-    }
+// Global variable store (simulating N8N variables)
+const workflowVariables = new Map();
+
+// Helper function to set workflow variables
+function setWorkflowVariable(name, value) {
+    workflowVariables.set(name, value);
+    console.log(`Variable set: ${name}`); // For debugging
+}
+
+// Helper function to get workflow variables
+function getWorkflowVariable(name) {
+    return workflowVariables.get(name);
 }
 
 // In-memory store (replace with your preferred database)
@@ -54,7 +57,7 @@ app.get('/webhook/logins', async (req, res) => {
         
         const userAccessToken = tokenResponse.data.access_token;
         
-        // Step 2: Get user details
+        // Step 2: Get user details and store in workflow variables
         const userResponse = await axios.get('https://graph.facebook.com/me', {
             params: {
                 fields: 'id,name,email',
@@ -62,7 +65,10 @@ app.get('/webhook/logins', async (req, res) => {
             }
         });
         
-        const userId = userResponse.data.id;
+        // Store user info in workflow variables
+        setWorkflowVariable('userId', userResponse.data.id);
+        setWorkflowVariable('userName', userResponse.data.name);
+        setWorkflowVariable('userEmail', userResponse.data.email);
         
         // Step 3: Get page access token
         const pageTokenResponse = await axios.get('https://graph.facebook.com/v20.0/me/accounts', {
@@ -75,18 +81,29 @@ app.get('/webhook/logins', async (req, res) => {
         
         // Step 4: Generate hash key and encrypt token
         const hashKey = crypto.createHash('sha256')
-            .update(`${userId} ${new Date().toISOString()}`)
+            .update(`${userResponse.data.id} ${new Date().toISOString()}`)
             .digest('hex');
             
         const encryptedToken = encryptToken(pageAccessToken, hashKey);
         
         // Store encrypted token with user info
-        tokenStore.set(userId, {
+        tokenStore.set(userResponse.data.id, {
             encryptedToken,
             hashKey,
             name: userResponse.data.name,
             email: userResponse.data.email,
             timestamp: new Date()
+        });
+
+        // Store token info in workflow variables
+        setWorkflowVariable('encryptedToken', encryptedToken);
+        setWorkflowVariable('hashKey', hashKey);
+        
+        // Example of accessing stored variables
+        console.log('Stored user info:', {
+            name: getWorkflowVariable('userName'),
+            email: getWorkflowVariable('userEmail'),
+            id: getWorkflowVariable('userId')
         });
         
         // Return success page
@@ -111,9 +128,6 @@ app.get('/webhook/logins', async (req, res) => {
         res.status(500).send('An error occurred');
     }
 });
-
-// Initial configuration validation
-validateConfig();
 
 // Start server
 app.listen(config.port, () => {
